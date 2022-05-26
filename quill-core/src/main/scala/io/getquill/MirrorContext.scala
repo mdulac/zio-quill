@@ -31,8 +31,15 @@ class MirrorContext[Idiom <: BaseIdiom, Naming <: NamingStrategy](val idiom: Idi
   override type RunBatchActionResult = BatchActionMirror
   override type RunBatchActionReturningResult[T] = BatchActionReturningMirror[T]
   override type Session = MirrorSession
+  override type NullChecker = MirrorNullChecker
 
   override def close = ()
+
+  class MirrorNullChecker extends BaseNullChecker {
+    override def apply(index: Index, row: Row, session: MirrorSession): Boolean = row.nullAt(index)
+  }
+
+  implicit val nullChecker: NullChecker = new MirrorNullChecker()
 
   def probe(statement: String): Try[_] =
     if (statement.contains("Fail"))
