@@ -90,73 +90,39 @@ class MetaDslMacro(val c: MacroContext) extends ValueComputation {
           )
       }
 
-    case class FieldExpansion(lookup: Tree, old: Tree) //nullCheck: Tree,
+    case class FieldExpansion(lookup: Tree, nullChecker: Tree)
 
-    def expand(value: Value, parentOptional: Boolean = false): Tree =
-      expandRecurse(value, parentOptional)
-
-    def expandRecurse(value: Value, parentOptional: Boolean = false): FieldExpansion =
+    def expandRecurse(value: Value): FieldExpansion =
       value match {
 
         case Scalar(_, tpe, decoder, optional) =>
           index += 1
-          if (parentOptional) {
-            if (optional) {
-              val lookup = q"$decoder($index, row, session)"
-              val oldLookup = q"Some($decoder($index, row, session))"
-              FieldExpansion(lookup, oldLookup)
-            }  else {
-              val lookup = q"$decoder($index, row, session)"
-              val oldLookup = q"implicitly[${c.prefix}.Decoder[Option[$tpe]]].apply($index, row, session)"
-              FieldExpansion(lookup, oldLookup)
-            }
-
-          } else {
-            val lookup = q"$decoder($index, row, session)"
-            val oldLookup = q"$decoder($index, row, session)"
-            FieldExpansion(lookup, oldLookup)
-          }
+          FieldExpansion(q"$decoder($index, row, session)", q"$nullChecker($index, row, session)")
 
         case Nested(_, tpe, params, optional) =>
-          if (parentOptional || optional) {
-            val groups: Seq[List[(Tree, Boolean)]] =
-              params.map(_.map(v => expand(v, parentOptional = true) -> v.nestedAndOptional))
+          if (optional) {
+            val dualGroups: Seq[List[(FieldExpansion, Boolean)]] =
+              params.map(_.map(v => expandRecurse(v) -> v.nestedAndOptional))
 
-            val terms: Seq[List[FieldExpansion]] =
-              groups.zipWithIndex.map {
-                case (options: List[(Tree, Boolean)], idx1: Int) =>
-                  options.zipWithIndex.map {
-                    case ((_: Tree, opt: Boolean), idx2: Int) =>
-                      val term = TermName(s"o_${idx1}_$idx2")
-                      if (opt) {
-                        val lookup = q"Some($term)"
-                        val oldLookup = q"Some($term)"
-                        FieldExpansion(lookup, oldLookup)
-                      } else {
-                        val lookup = q"$term"
-                        val oldLookup = q"$term"
-                        FieldExpansion(lookup, oldLookup)
-                      }
-                  }
-              }
+            val productElements: Seq[List[Tree]] = dualGroups.map(_.map { case (k, v) => (k.lookup) })
+            val nullChecks: Seq[List[Tree]] = dualGroups.map(_.map { case (k, v) => (k.nullChecker) })
+            val totalNullCheck =
+              nullChecks.flatMap(v => v).reduce((a, b) => q"$a && $b")
 
-            groups.zipWithIndex.foldLeft(q"Some(new $tpe(...$terms))") {
-              case (body: Tree, (options: List[(Tree, Boolean)], idx1: Int)) =>
-                options.zipWithIndex.foldLeft(body) {
-                  case (body, ((option, _), idx2)) =>
-                    val o = q"val ${TermName(s"o_${idx1}_$idx2")} = $EmptyTree"
-                    val lookup = q"$option.flatMap($o => $body)"
-                    val oldLookup = q"$option.flatMap($o => $body)"
-                    FieldExpansion(lookup, oldLookup)
-                }
-            }
+            val newProductCreate =
+              q"if (!($totalNullCheck)) Some(new $tpe(...${productElements})) else None"
+            val newNullCheck =
+              totalNullCheck
+
+            FieldExpansion(newProductCreate, newNullCheck)
           } else {
-            val lookup = q"new $tpe(...${params.map(_.map(expand(_)))})"
-            val oldLookup = q"new $tpe(...${params.map(_.map(expand(_)))})"
-            FieldExpansion(lookup, oldLookup)
+            val dualGroups = params.map(_.map(expandRecurse(_)))
+            val productElements: List[List[Tree]] = dualGroups.map(_.map(_.lookup))
+            val lookup = q"new $tpe(...${productElements})"
+            FieldExpansion(lookup, q"false")
           }
       }
-    q"(row: ${c.prefix}.ResultRow, session: ${c.prefix}.Session) => ${expand(value)}"
+    q"(row: ${c.prefix}.ResultRow, session: ${c.prefix}.Session) => ${expandRecurse(value).lookup}"
   }
 
   private def actionMeta[T](value: Value, method: String)(implicit t: WeakTypeTag[T]) = {
