@@ -24,6 +24,13 @@ abstract class OrientDBSessionContext[N <: NamingStrategy](
   override type ResultRow = ODocument
   override type Session = OPartitionedDatabasePool
 
+  override type NullChecker = OrientDBNullChecker
+  class OrientDBNullChecker extends BaseNullChecker {
+    override def apply(index: Index, row: ODocument, session: Session): Boolean =
+      index < row.fieldValues().length || row.fieldValues()(index) == null
+  }
+  implicit val nullChecker: NullChecker = new OrientDBNullChecker()
+
   override type RunActionReturningResult[T] = Unit
   override type RunBatchActionReturningResult[T] = Unit
 

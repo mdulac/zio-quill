@@ -49,6 +49,7 @@ abstract class JAsyncContext[D <: SqlIdiom, N <: NamingStrategy, C <: ConcreteCo
     override def apply(index: Int, row: RowData, session: Session): Boolean =
       row.get(index) == null
   }
+  implicit val nullChecker: NullChecker = new JasyncNullChecker()
 
   implicit def toFuture[T](cf: CompletableFuture[T]): Future[T] = FutureConverters.toScala(cf)
   implicit def toCompletableFuture[T](f: Future[T]): CompletableFuture[T] = FutureConverters.toJava(f).asInstanceOf[CompletableFuture[T]]
