@@ -2,8 +2,6 @@ package io.getquill.context.mirror
 
 import scala.reflect.ClassTag
 
-import io.getquill.util.Messages.fail
-
 /**
  * Defines a artificial 'Row' used for the mirror context. Mostly used for testing.
  * (Note that this must not be in quill-engine or it will conflict with the io.getquill.context.mirror.Row
@@ -21,7 +19,7 @@ case class Row private (data: List[Any]) {
   def apply[T](index: Int)(implicit t: ClassTag[T]) =
     data(index) match {
       case v: T  => v
-      case other => throw new RuntimeException(s"Invalid column type. Expected '${t.runtimeClass}', but got '$other'")
+      case other => throw new IllegalStateException(s"Invalid column type. Expected '${t.runtimeClass}', but got '$other'")
     }
 }
 

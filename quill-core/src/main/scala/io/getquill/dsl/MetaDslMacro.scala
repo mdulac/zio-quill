@@ -106,20 +106,31 @@ class MetaDslMacro(val c: MacroContext) extends ValueComputation {
 
             val productElements: Seq[List[Tree]] = dualGroups.map(_.map { case (k, v) => (k.lookup) })
             val nullChecks: Seq[List[Tree]] = dualGroups.map(_.map { case (k, v) => (k.nullChecker) })
-            val totalNullCheck =
-              nullChecks.flatMap(v => v).reduce((a, b) => q"$a && $b")
 
-            val newProductCreate =
-              q"if (!($totalNullCheck)) Some(new $tpe(...${productElements})) else None"
-            val newNullCheck =
-              totalNullCheck
+            val totalNullCheck = nullChecks.flatMap(v => v).reduce((a, b) => q"$a && $b")
+            val newProductCreate = q"if (!($totalNullCheck)) Some(new $tpe(...${productElements})) else None"
 
-            FieldExpansion(newProductCreate, newNullCheck)
+            FieldExpansion(newProductCreate, totalNullCheck)
           } else {
             val dualGroups = params.map(_.map(expandRecurse(_)))
+            val nullChecks: Seq[List[Tree]] = dualGroups.map(_.map(_.nullChecker))
             val productElements: List[List[Tree]] = dualGroups.map(_.map(_.lookup))
+
             val lookup = q"new $tpe(...${productElements})"
-            FieldExpansion(lookup, q"false")
+            val totalNullCheck = nullChecks.flatMap(v => v).reduce((a, b) => q"$a && $b")
+
+            FieldExpansion(
+              lookup,
+              // Propagate up the null checks found here. Even though this row cannot be null, maybe a higher-level
+              // row is null. E.g. we are processing:
+              //   Some((Person(name:String, age:Int), Address(street:Option[String]))
+              // from the row:
+              //   Row(null, null, null) which becomes Option((Person(null,0), Address(None)))
+              // and say we are are processing the 'Address' part which can't be null. We still want to
+              // return the internal columns of Address since the outer Option can be None.
+              // Address.
+              totalNullCheck
+            )
           }
       }
     q"(row: ${c.prefix}.ResultRow, session: ${c.prefix}.Session) => ${expandRecurse(value).lookup}"
