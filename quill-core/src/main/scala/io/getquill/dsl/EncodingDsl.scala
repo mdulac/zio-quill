@@ -23,7 +23,7 @@ trait EncodingDsl extends LowPriorityImplicits {
   type Session
   type Index = Int
 
-  type BaseNullChecker = (Index, PrepareRow, Session) => Boolean
+  type BaseNullChecker = (Index, ResultRow, Session) => Boolean
 
   type NullChecker <: BaseNullChecker
 
