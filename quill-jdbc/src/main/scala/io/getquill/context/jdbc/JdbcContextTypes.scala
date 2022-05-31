@@ -20,11 +20,12 @@ trait JdbcContextTypes[Dialect <: SqlIdiom, Naming <: NamingStrategy] extends Co
   type Session = Connection
   type Runner = Unit
   override type NullChecker = JdbcNullChecker
-
   class JdbcNullChecker extends BaseNullChecker {
-    override def apply(index: Int, row: ResultSet, session: Connection): Boolean =
-      row.getObject(index) == null
+    override def apply(index: Int, row: ResultSet, session: Connection): Boolean = {
+      row.getObject(index + 1) == null
+    }
   }
+  implicit val nullChecker: JdbcNullChecker = new JdbcNullChecker()
 
   protected val dateTimeZone = TimeZone.getDefault
 
