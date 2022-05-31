@@ -91,7 +91,6 @@ class MetaDslSpec extends Spec {
         case class Entity1(a: String, b: Int)
         case class Entity2(a: Option[Int])
         val meta = materializeQueryMeta[(String, Option[(Entity1, Entity2)])]
-        PrintMac(materializeQueryMeta[(String, Option[(Entity1, Entity2)])])
 
         "extracts Some if all columns are defined" in {
           meta.extract(Row("a", "1", 2, 3), MirrorSession.default) mustEqual
